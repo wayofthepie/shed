@@ -14,9 +14,14 @@ import Database.Persist.Sqlite
 import Database.Persist.TH
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-User
+Step
   name T.Text
-  age  Int
   UniqueName name
+  Primary name
+  deriving Eq Read Show
+Executable
+  cmd T.Text
+  args [T.Text]
+  step StepId
   deriving Eq Read Show
 |]

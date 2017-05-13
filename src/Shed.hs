@@ -1,9 +1,6 @@
 {-# LANGUAGE DataKinds #-}
-
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies   #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 module Shed
     ( startApp
     , app
@@ -13,7 +10,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Logger (runStderrLoggingT)
 import Data.Aeson
 import Data.Aeson.TH
-import Data.Text as T
+import qualified Data.Text as T
 import Database.Persist
 import Database.Persist.Sql
 import Database.Persist.Sqlite
@@ -23,22 +20,17 @@ import Network.Wai.Handler.Warp
 import Servant
 import qualified Shelly as S
 
+import Debug.Trace
+import Step
 import qualified Model
 
-data Exec = Exec
-  { cmd :: T.Text
-  , args :: T.Text
-  } deriving (Eq, Show)
 
-newtype ExecResult = ExecResult
-  { result :: T.Text
-  } deriving (Eq, Show)
+type API = "steps" :>
+  ( ReqBody '[JSON] Step :> Post '[JSON] (Either T.Text (Key Model.Step))
+  :<|> Capture "stepName" T.Text :> Get '[JSON] (Either T.Text Step)
+  )
 
-$(deriveJSON defaultOptions ''Exec)
-$(deriveJSON defaultOptions ''ExecResult)
-
-type API = "exec" :> ReqBody '[JSON] Exec  :> Post '[JSON] ExecResult
-
+-- | Start our application.
 startApp :: FilePath -> IO ()
 startApp sqliteFile = run 8080 =<< mkApp sqliteFile
   where
@@ -54,11 +46,9 @@ app pool = serve api (server pool)
 api :: Proxy API
 api = Proxy
 
+-- | Handle requests.
 server :: ConnectionPool -> Server API
-server pool = execH
+server pool = stepsPostH :<|> stepsGetWithIdH
   where
-    execH cmd = liftIO $ exec cmd
-
-exec :: Exec -> IO ExecResult
-exec (Exec cmd args) = S.shelly $ S.verbosely $
-  S.run (S.fromText cmd) [args] >>= \r -> pure $ ExecResult r
+    stepsGetWithIdH stepName = liftIO $ getStepFromName pool stepName
+    stepsPostH step = liftIO $ createStep pool step

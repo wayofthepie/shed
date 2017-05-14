@@ -22,7 +22,8 @@ library
                      , Shed.Step.Model
   build-depends:       base >= 4.7 && < 5
                      , aeson
-                     , either
+                     , either >= 2.5.1
+                     , esqueleto
                      , monad-logger
                      , monad-control >= 1.0.0.0
                      , mtl

@@ -13,8 +13,9 @@ data Step = Step
   , executables :: [Executable]
   } deriving (Eq, Show)
 
-newtype StepCreationSuccess = StepCreationSuccess
-  {  stepId :: T.Text
+data StepCreationSuccess = StepCreationSuccess
+  { stepId :: T.Text
+  , stepVersion :: Int
   } deriving (Eq, Show)
 
 data Executable = Executable

@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Shed.Step (
   module Shed.Step.Api
@@ -10,9 +11,12 @@ module Shed.Step (
 
 import Control.Monad.Except
 import Control.Monad.Reader
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.Encoding as TE
 import qualified Data.Text.Lazy as TL
+import Database.Esqueleto hiding ((==.))
+import Database.Esqueleto.Internal.Language (From)
 import Database.Persist
 import Database.Persist.Sql
 import Servant
@@ -20,6 +24,8 @@ import Servant
 import Shed.Step.Api
 import qualified Shed.Step.Model as Model
 import Shed.Types (AppT(..))
+
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- CRUD.
@@ -29,18 +35,25 @@ createStep :: Step -> AppT IO StepCreationSuccess
 createStep step = do
     exists <- runQuery $ selectFirst [Model.StepName ==. name step] []
     case exists of
-      Nothing -> do
-        createdStepKey <- runQuery $ insert (stepToModel step)
+      Nothing -> runQuery $ do
+        latestVersion <- selectLatestVersion
+        createdStepKey <- insert (stepToModel step (latestVersion + 1))
         createExecs (executables step) createdStepKey
-        maybeStep <- runQuery $ get createdStepKey
+        maybeStep <- get createdStepKey
         case maybeStep of
           Nothing -> unknownError
-          Just (Model.Step n) -> pure (StepCreationSuccess n)
+          Just (Model.Step n v) -> pure (StepCreationSuccess n v)
       Just _ -> alreadyExistsError
   where
     createExecs execs stepKey = do
       let modelExecs = fmap (executableToModel stepKey) execs
-      runQuery $ insertMany_ modelExecs
+      insertMany_ modelExecs
+
+    selectLatestVersion :: SqlPersistT (AppT IO) Int
+    selectLatestVersion = do
+      steps <- select $
+        from $ \step -> pure (max_ (step ^. Model.StepVersion))
+      pure . head $ fmap (fromMaybe 0 . unValue) steps
 
     alreadyExistsError = customError
       err409
@@ -96,9 +109,10 @@ executableToModel step exec= Model.Executable
   }
 
 -- | Build a Step model from the given step.
-stepToModel :: Step -> Model.Step
-stepToModel step = Model.Step
+stepToModel :: Step -> Int-> Model.Step
+stepToModel step version = Model.Step
   { Model.stepName = name step
+  , Model.stepVersion = version
   }
 
 -- | Build an Executable from an Executable model Entity.

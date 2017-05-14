@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -17,8 +19,8 @@ import Database.Persist.TH
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Step
   name T.Text
+  version Int
   UniqueName name
-  Primary name
   deriving Eq Read Show
 Executable
   cmd T.Text

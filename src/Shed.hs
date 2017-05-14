@@ -1,64 +1,67 @@
 {-# LANGUAGE DataKinds #-}
-
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies   #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 module Shed
     ( startApp
     , app
     ) where
 
-import Control.Monad.IO.Class
 import Control.Monad.Logger (runStderrLoggingT)
-import Data.Aeson
-import Data.Aeson.TH
-import Data.Text as T
-import Database.Persist
+import Control.Monad.Reader
+import qualified Data.Text as T
+import Database.Persist ()
 import Database.Persist.Sql
 import Database.Persist.Sqlite
-import Database.Persist.TH
+import Database.Persist.TH ()
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Servant
-import qualified Shelly as S
 
-import qualified Model
+import Shed.Step
+import Shed.Types (AppT(..))
 
-data Exec = Exec
-  { cmd :: T.Text
-  , args :: T.Text
-  } deriving (Eq, Show)
+--------------------------------------------------------------------------------
+-- Api.
+--------------------------------------------------------------------------------
+type Api = StepApi
 
-newtype ExecResult = ExecResult
-  { result :: T.Text
-  } deriving (Eq, Show)
-
-$(deriveJSON defaultOptions ''Exec)
-$(deriveJSON defaultOptions ''ExecResult)
-
-type API = "exec" :> ReqBody '[JSON] Exec  :> Post '[JSON] ExecResult
-
+--------------------------------------------------------------------------------
+-- Server setup.
+--------------------------------------------------------------------------------
+-- | Start our application.
 startApp :: FilePath -> IO ()
-startApp sqliteFile = run 8080 =<< mkApp sqliteFile
+startApp sqliteFile = run 8080 =<< mkApp
   where
-    mkApp :: FilePath -> IO Application
-    mkApp sqliteFile = do
+    mkApp :: IO Application
+    mkApp = do
       pool <- runStderrLoggingT $ createSqlitePool (T.pack sqliteFile) 5
-      runSqlPool (runMigration Model.migrateAll) pool
+      runSqlPool (runMigration migrateAll) pool
       pure $ app pool
 
+runAppT :: ConnectionPool -> AppT IO :~> Handler
+runAppT pool = Nat (flip runReaderT pool . runApp)
+
 app :: ConnectionPool -> Application
-app pool = serve api (server pool)
-
-api :: Proxy API
-api = Proxy
-
-server :: ConnectionPool -> Server API
-server pool = execH
+app pool = serve api (readerServer pool)
   where
-    execH cmd = liftIO $ exec cmd
+    api :: Proxy Api
+    api = Proxy
 
-exec :: Exec -> IO ExecResult
-exec (Exec cmd args) = S.shelly $ S.verbosely $
-  S.run (S.fromText cmd) [args] >>= \r -> pure $ ExecResult r
+readerServer :: ConnectionPool -> Server Api
+readerServer pool = enter (runAppT pool) readerServerT
+
+-- | Combine our handlers.
+readerServerT :: ServerT Api (AppT IO)
+readerServerT = stepsPostH :<|> stepsGetWithIdH
+
+--------------------------------------------------------------------------------
+-- Handlers
+--------------------------------------------------------------------------------
+-- | Create a Step.
+stepsPostH :: Step -> AppT IO StepCreationSuccess
+stepsPostH = createStep 
+
+-- | Get a step with the given ID.
+stepsGetWithIdH :: T.Text -> AppT IO Step
+stepsGetWithIdH = getStepFromName

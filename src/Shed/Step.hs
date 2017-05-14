@@ -22,7 +22,7 @@ import qualified Shed.Step.Model as Model
 -- CRUD.
 --------------------------------------------------------------------------------
 -- | Persist a Step.
-createStep :: ConnectionPool -> Step -> IO (Either T.Text T.Text)
+createStep :: ConnectionPool -> Step -> IO (Either T.Text StepCreationSuccess)
 createStep pool step = flip runSqlPersistMPool pool $ do
   exists <- selectFirst [Model.StepName ==. name step] []
   case exists of
@@ -35,7 +35,7 @@ createStep pool step = flip runSqlPersistMPool pool $ do
         Nothing ->
           packLeft "Something went wrong retrieving the created Step key..."
         Just (Model.Step name) ->
-          Right name
+          Right (StepCreationSuccess name)
     Just _ -> pure alreadyExistsError
   where
     createExecs execs stepKey = do

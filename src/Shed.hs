@@ -49,7 +49,7 @@ newtype App a = App
 --------------------------------------------------------------------------------
 -- Api.
 --------------------------------------------------------------------------------
-type Api = StepApi 
+type Api = StepApi
 
 --------------------------------------------------------------------------------
 -- Server setup.
@@ -84,12 +84,12 @@ readerServerT = stepsPostH :<|> stepsGetWithIdH
 -- Handlers
 --------------------------------------------------------------------------------
 -- | Create a Step.
-stepsPostH :: Step -> App T.Text
+stepsPostH :: Step -> App StepCreationSuccess
 stepsPostH step = do
   pool <- ask
   eitherStep <- liftIO $ createStep pool step
   case eitherStep of
-    Right stepId -> pure stepId
+    Right success -> pure success
     Left e -> throwError (err409
       { errBody = TE.encodeUtf8 . TL.fromStrict $ e
       })

@@ -13,6 +13,10 @@ data Step = Step
   , execute :: [Executable]
   } deriving (Eq, Show)
 
+newtype StepCreationSuccess = StepCreationSuccess
+  {  stepId :: T.Text
+  } deriving (Eq, Show)
+
 data Executable = Executable
   { cmd :: T.Text
   , args :: [T.Text]
@@ -20,8 +24,9 @@ data Executable = Executable
 
 $(deriveJSON defaultOptions ''Step)
 $(deriveJSON defaultOptions ''Executable)
+$(deriveJSON defaultOptions ''StepCreationSuccess)
 
 type StepApi = "steps" :>
-    ( ReqBody '[JSON] Step :> PostCreated '[JSON] T.Text
+    ( ReqBody '[JSON] Step :> PostCreated '[JSON] StepCreationSuccess
     :<|> Capture "stepName" T.Text :> Get '[JSON] Step
     )

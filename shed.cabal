@@ -16,8 +16,9 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Shed
-  other-modules:       Model
-                     , Step
+  other-modules:       Shed.Step
+                     , Shed.Step.Api
+                     , Shed.Step.Model
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , either

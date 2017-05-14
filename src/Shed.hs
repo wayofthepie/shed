@@ -30,8 +30,7 @@ import Servant
 import qualified Shelly as S
 
 import Debug.Trace
-import Step
-import qualified Model
+import Shed.Step
 
 --------------------------------------------------------------------------------
 -- Application monad.
@@ -50,10 +49,7 @@ newtype App a = App
 --------------------------------------------------------------------------------
 -- Api.
 --------------------------------------------------------------------------------
-type Api = "steps" :>
-  ( ReqBody '[JSON] Step :> PostCreated '[JSON] T.Text
-  :<|> Capture "stepName" T.Text :> Get '[JSON] Step
-  )
+type Api = StepApi 
 
 --------------------------------------------------------------------------------
 -- Server setup.
@@ -65,7 +61,7 @@ startApp sqliteFile = run 8080 =<< mkApp sqliteFile
     mkApp :: FilePath -> IO Application
     mkApp sqliteFile = do
       pool <- runStderrLoggingT $ createSqlitePool (T.pack sqliteFile) 5
-      runSqlPool (runMigration Model.migrateAll) pool
+      runSqlPool (runMigration migrateAll) pool
       pure $ app pool
 
 runAppT :: ConnectionPool -> App :~> Handler

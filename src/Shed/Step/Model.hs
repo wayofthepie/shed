@@ -5,7 +5,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies   #-}
 
-module Model where
+module Shed.Step.Model where
 
 import Data.Text as T
 import Database.Persist
@@ -13,8 +13,7 @@ import Database.Persist.Sql
 import Database.Persist.Sqlite
 import Database.Persist.TH
 
-
--- | Database schema and persistable entities for shed.
+-- | Database schema and persistable entities for steps.
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Step
   name T.Text

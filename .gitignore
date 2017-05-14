@@ -24,4 +24,4 @@ cabal.project.local
 
 # Other
 result
-*.sqlite
+*.sqlite*

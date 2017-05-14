@@ -1,7 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-module Step where
+module Shed.Step (
+  module Shed.Step.Api
+  , Model.migrateAll
+  , createStep
+  , getStepFromName
+  ) where
 
 import Control.Monad.Logger (runStderrLoggingT)
 import Data.Aeson.TH
@@ -12,25 +15,8 @@ import Database.Persist.Sql
 import Database.Persist.Sqlite
 import Database.Persist.TH
 
-import qualified Model
-
---------------------------------------------------------------------------------
--- Data types.
---------------------------------------------------------------------------------
-newtype StepKey = StepKey (Key Model.Step)
-
-data Step = Step
-  { name :: T.Text
-  , execute :: [Executable]
-  } deriving (Eq, Show)
-
-data Executable = Executable
-  { cmd :: T.Text
-  , args :: [T.Text]
-  } deriving (Eq, Show)
-
-$(deriveJSON defaultOptions ''Step)
-$(deriveJSON defaultOptions ''Executable)
+import Shed.Step.Api
+import qualified Shed.Step.Model as Model
 
 --------------------------------------------------------------------------------
 -- CRUD.
@@ -74,7 +60,7 @@ getStepFromName pool stepName = flip runSqlPersistMPool pool $ do
 
     doesNotExistError =
       packLeft ("Step " ++ T.unpack stepName ++ " does not exist!")
-      
+
 --------------------------------------------------------------------------------
 -- Transformation.
 --------------------------------------------------------------------------------

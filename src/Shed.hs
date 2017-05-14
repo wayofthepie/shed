@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 module Shed
@@ -8,12 +7,9 @@ module Shed
     , app
     ) where
 
-import Control.Monad.Except
 import Control.Monad.Logger (runStderrLoggingT)
 import Control.Monad.Reader
 import qualified Data.Text as T
-import qualified Data.Text.Lazy.Encoding as TE
-import qualified Data.Text.Lazy as TL
 import Database.Persist ()
 import Database.Persist.Sql
 import Database.Persist.Sqlite
@@ -23,20 +19,7 @@ import Network.Wai.Handler.Warp
 import Servant
 
 import Shed.Step
-
---------------------------------------------------------------------------------
--- Application monad.
---------------------------------------------------------------------------------
-newtype App a = App
-  { runApp :: ReaderT ConnectionPool (ExceptT ServantErr IO) a
-  } deriving
-      ( Monad
-      , Functor
-      , Applicative
-      , MonadReader ConnectionPool
-      , MonadIO
-      , MonadError ServantErr
-      )
+import Shed.Types (AppT(..))
 
 --------------------------------------------------------------------------------
 -- Api.
@@ -48,7 +31,7 @@ type Api = StepApi
 --------------------------------------------------------------------------------
 -- | Start our application.
 startApp :: FilePath -> IO ()
-startApp sqliteFile = run 8080 =<< mkApp 
+startApp sqliteFile = run 8080 =<< mkApp
   where
     mkApp :: IO Application
     mkApp = do
@@ -56,7 +39,7 @@ startApp sqliteFile = run 8080 =<< mkApp
       runSqlPool (runMigration migrateAll) pool
       pure $ app pool
 
-runAppT :: ConnectionPool -> App :~> Handler
+runAppT :: ConnectionPool -> AppT IO :~> Handler
 runAppT pool = Nat (flip runReaderT pool . runApp)
 
 app :: ConnectionPool -> Application
@@ -69,30 +52,16 @@ readerServer :: ConnectionPool -> Server Api
 readerServer pool = enter (runAppT pool) readerServerT
 
 -- | Combine our handlers.
-readerServerT :: ServerT Api App
+readerServerT :: ServerT Api (AppT IO)
 readerServerT = stepsPostH :<|> stepsGetWithIdH
 
 --------------------------------------------------------------------------------
 -- Handlers
 --------------------------------------------------------------------------------
 -- | Create a Step.
-stepsPostH :: Step -> App StepCreationSuccess
-stepsPostH step = do
-  pool <- ask
-  eitherStep <- liftIO $ createStep pool step
-  case eitherStep of
-    Right success -> pure success
-    Left e -> throwError (err409
-      { errBody = TE.encodeUtf8 . TL.fromStrict $ e
-      })
+stepsPostH :: Step -> AppT IO StepCreationSuccess
+stepsPostH = createStep 
 
 -- | Get a step with the given ID.
-stepsGetWithIdH :: T.Text -> App Step
-stepsGetWithIdH stepName = do
-  pool <- ask
-  eitherStep <- liftIO $ getStepFromName pool stepName
-  case eitherStep of
-    Right step -> pure step
-    Left e -> throwError (err404
-      { errBody = TE.encodeUtf8 . TL.fromStrict $ e
-      })
+stepsGetWithIdH :: T.Text -> AppT IO Step
+stepsGetWithIdH = getStepFromName

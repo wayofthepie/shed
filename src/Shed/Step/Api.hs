@@ -10,7 +10,7 @@ import Servant
 
 data Step = Step
   { name :: T.Text
-  , execute :: [Executable]
+  , executable :: [Executable]
   } deriving (Eq, Show)
 
 newtype StepCreationSuccess = StepCreationSuccess

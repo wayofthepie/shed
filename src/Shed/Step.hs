@@ -1,4 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+
 module Shed.Step (
   module Shed.Step.Api
   , Model.migrateAll
@@ -6,60 +8,82 @@ module Shed.Step (
   , getStepFromName
   ) where
 
-import Control.Monad.Logger (runStderrLoggingT)
-import Data.Aeson.TH
-import Data.Monoid ((<>))
+import Control.Monad.Except
+import Control.Monad.Reader
 import qualified Data.Text as T
+import qualified Data.Text.Lazy.Encoding as TE
+import qualified Data.Text.Lazy as TL
 import Database.Persist
 import Database.Persist.Sql
-import Database.Persist.Sqlite
-import Database.Persist.TH
+import Servant
 
 import Shed.Step.Api
 import qualified Shed.Step.Model as Model
+import Shed.Types (AppT(..))
 
 --------------------------------------------------------------------------------
 -- CRUD.
 --------------------------------------------------------------------------------
 -- | Persist a Step.
-createStep :: ConnectionPool -> Step -> IO (Either T.Text StepCreationSuccess)
-createStep pool step = flip runSqlPersistMPool pool $ do
-  exists <- selectFirst [Model.StepName ==. name step] []
-  case exists of
-    Nothing -> do
-      let stepModel = stepToModel step
-      createdStepKey <- insert stepModel
-      createExecs (execute step) createdStepKey
-      maybeStep <- get createdStepKey
-      pure $ case maybeStep of
-        Nothing ->
-          packLeft "Something went wrong retrieving the created Step key..."
-        Just (Model.Step name) ->
-          Right (StepCreationSuccess name)
-    Just _ -> pure alreadyExistsError
+createStep :: Step -> AppT IO StepCreationSuccess
+createStep step = do
+    exists <- runQuery $ selectFirst [Model.StepName ==. name step] []
+    case exists of
+      Nothing -> do
+        createdStepKey <- runQuery $ insert (stepToModel step)
+        createExecs (executable step) createdStepKey
+        maybeStep <- runQuery $ get createdStepKey
+        case maybeStep of
+          Nothing -> unknownError
+          Just (Model.Step n) -> pure (StepCreationSuccess n)
+      Just _ -> alreadyExistsError
   where
     createExecs execs stepKey = do
       let modelExecs = fmap (executableToModel stepKey) execs
-      insertMany_ modelExecs
+      runQuery $ insertMany_ modelExecs
 
-    alreadyExistsError =
-      packLeft ("Step " ++ T.unpack (name step) ++ " already exists!")
+    alreadyExistsError = customError
+      err409
+      ("Step " ++ T.unpack (name step) ++ " already exists!")
+
+    unknownError = customError
+      err500
+      "Something went wrong retrieving the created Step key..."
+
 
 -- | Retrieve the Step corresponding to the given name.
-getStepFromName :: ConnectionPool -> T.Text -> IO (Either T.Text Step)
-getStepFromName pool stepName = flip runSqlPersistMPool pool $ do
-  maybeStepName <- getBy (Model.UniqueName stepName)
+getStepFromName :: T.Text -> AppT IO Step
+getStepFromName stepName = do
+  maybeStepName <- runQuery $ getBy (Model.UniqueName stepName)
   case maybeStepName of
-    Nothing -> pure  doesNotExistError
+    Nothing -> doesNotExistError
     Just entity -> constructStepFromEntity entity
   where
-    constructStepFromEntity (Entity stepId stepModel) = do
-      execModelEntities <- selectList [Model.ExecutableStep ==. stepId] []
+    constructStepFromEntity (Entity stepEntityId stepModel) = do
+      execModelEntities <- runQuery $
+        selectList [Model.ExecutableStep ==. stepEntityId] []
       let execs = fmap entityToExecutable execModelEntities
-      pure . Right $ modelToStep stepModel execs
+      pure (modelToStep stepModel execs)
 
-    doesNotExistError =
-      packLeft ("Step " ++ T.unpack stepName ++ " does not exist!")
+    doesNotExistError = customError
+      err404
+      ("Step " ++ T.unpack stepName ++ " does not exist!")
+
+-- | Throw a custom ServantErr.
+customError :: MonadError ServantErr m => ServantErr -> String -> m a
+customError errF msg = throwError (errF
+    { errBody = TE.encodeUtf8 . TL.fromStrict . T.pack $ msg
+    })
+
+-- | Run the query on a connection from the pool.
+runDb :: ConnectionPool -> SqlPersistT (AppT IO) a -> AppT IO a
+runDb pool q = runSqlPool q pool
+
+-- | Run the query.
+runQuery :: SqlPersistT (AppT IO) a -> AppT IO a
+runQuery query = do
+  pool <- ask
+  runDb pool query
 
 --------------------------------------------------------------------------------
 -- Transformation.
@@ -80,7 +104,7 @@ stepToModel step = Model.Step
 
 -- | Build an Executable from an Executable model Entity.
 entityToExecutable :: Entity Model.Executable -> Executable
-entityToExecutable (Entity modelId model) = Executable
+entityToExecutable (Entity _ model) = Executable
   { cmd = Model.executableCmd model
   , args = Model.executableArgs model
   }
@@ -89,9 +113,5 @@ entityToExecutable (Entity modelId model) = Executable
 modelToStep :: Model.Step -> [Executable] -> Step
 modelToStep model execs = Step
   { name = Model.stepName model
-  , execute = execs
+  , executable = execs
   }
-
--- | Pack a String as a Left Text.
-packLeft :: String -> Either T.Text a
-packLeft = Left . T.pack

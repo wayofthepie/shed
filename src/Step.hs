@@ -1,9 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Step where
 
 import Control.Monad.Logger (runStderrLoggingT)
 import Data.Aeson.TH
+import Data.Monoid ((<>))
 import qualified Data.Text as T
 import Database.Persist
 import Database.Persist.Sql
@@ -11,6 +13,11 @@ import Database.Persist.Sqlite
 import Database.Persist.TH
 
 import qualified Model
+
+--------------------------------------------------------------------------------
+-- Data types.
+--------------------------------------------------------------------------------
+newtype StepKey = StepKey (Key Model.Step)
 
 data Step = Step
   { name :: T.Text
@@ -25,39 +32,54 @@ data Executable = Executable
 $(deriveJSON defaultOptions ''Step)
 $(deriveJSON defaultOptions ''Executable)
 
-
--- | Persist a step.
-createStep :: ConnectionPool -> Step -> IO (Either T.Text (Key Model.Step))
+--------------------------------------------------------------------------------
+-- CRUD.
+--------------------------------------------------------------------------------
+-- | Persist a Step.
+createStep :: ConnectionPool -> Step -> IO (Either T.Text T.Text)
 createStep pool step = flip runSqlPersistMPool pool $ do
   exists <- selectFirst [Model.StepName ==. name step] []
   case exists of
     Nothing -> do
       let stepModel = stepToModel step
       createdStepKey <- insert stepModel
-      (Just createdStep) <- get createdStepKey
       createExecs (execute step) createdStepKey
-      pure . Right $ createdStepKey
-    Just _ -> pure . Left $ T.pack "Step already exists!"
+      maybeStep <- get createdStepKey
+      pure $ case maybeStep of
+        Nothing ->
+          packLeft "Something went wrong retrieving the created Step key..."
+        Just (Model.Step name) ->
+          Right name
+    Just _ -> pure alreadyExistsError
   where
-    -- createExecs :: [Executable] -> IO [Key Model.Executable]
-    createExecs execs step = do
-      let modelExecs = fmap (executableToModel step) execs
+    createExecs execs stepKey = do
+      let modelExecs = fmap (executableToModel stepKey) execs
       insertMany_ modelExecs
 
+    alreadyExistsError =
+      packLeft ("Step " ++ T.unpack (name step) ++ " already exists!")
+
+-- | Retrieve the Step corresponding to the given name.
 getStepFromName :: ConnectionPool -> T.Text -> IO (Either T.Text Step)
 getStepFromName pool stepName = flip runSqlPersistMPool pool $ do
   maybeStepName <- getBy (Model.UniqueName stepName)
   case maybeStepName of
-    Nothing -> pure . Left $ T.pack "Does not exist"
-    Just entity -> constructStepFromEntity entity >>= pure . Right
+    Nothing -> pure  doesNotExistError
+    Just entity -> constructStepFromEntity entity
   where
     constructStepFromEntity (Entity stepId stepModel) = do
       execModelEntities <- selectList [Model.ExecutableStep ==. stepId] []
       let execs = fmap entityToExecutable execModelEntities
-      pure $ modelToStep stepModel execs
+      pure . Right $ modelToStep stepModel execs
 
+    doesNotExistError =
+      packLeft ("Step " ++ T.unpack stepName ++ " does not exist!")
+      
+--------------------------------------------------------------------------------
+-- Transformation.
+--------------------------------------------------------------------------------
 -- | Build an Executable model from the given step Id and Executable.
-executableToModel :: (Key Model.Step) -> Executable -> Model.Executable
+executableToModel :: Key Model.Step -> Executable -> Model.Executable
 executableToModel step exec= Model.Executable
   { Model.executableCmd = cmd exec
   , Model.executableArgs = args exec
@@ -71,7 +93,7 @@ stepToModel step = Model.Step
   }
 
 -- | Build an Executable from an Executable model Entity.
-entityToExecutable :: (Entity Model.Executable) -> Executable
+entityToExecutable :: Entity Model.Executable -> Executable
 entityToExecutable (Entity modelId model) = Executable
   { cmd = Model.executableCmd model
   , args = Model.executableArgs model
@@ -83,3 +105,7 @@ modelToStep model execs = Step
   { name = Model.stepName model
   , execute = execs
   }
+
+-- | Pack a String as a Left Text.
+packLeft :: String -> Either T.Text a
+packLeft = Left . T.pack

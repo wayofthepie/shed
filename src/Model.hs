@@ -13,6 +13,8 @@ import Database.Persist.Sql
 import Database.Persist.Sqlite
 import Database.Persist.TH
 
+
+-- | Database schema and persistable entities for shed.
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Step
   name T.Text

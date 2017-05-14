@@ -20,7 +20,9 @@ library
                      , Step
   build-depends:       base >= 4.7 && < 5
                      , aeson
+                     , either
                      , monad-logger
+                     , mtl
                      , persistent
                      , persistent-sqlite
                      , persistent-template

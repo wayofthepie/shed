@@ -20,7 +20,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Step
   name T.Text
   version Int
-  UniqueName name
+  UniqueNameVersion name version
   deriving Eq Read Show
 Executable
   cmd T.Text

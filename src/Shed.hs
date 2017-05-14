@@ -53,15 +53,21 @@ readerServer pool = enter (runAppT pool) readerServerT
 
 -- | Combine our handlers.
 readerServerT :: ServerT Api (AppT IO)
-readerServerT = stepsPostH :<|> stepsGetWithIdH
+readerServerT = stepsPostH
+  :<|> stepsGetFromNameH
+  :<|> stepsGetFromNameVersionIdH
 
 --------------------------------------------------------------------------------
 -- Handlers
 --------------------------------------------------------------------------------
 -- | Create a Step.
 stepsPostH :: Step -> AppT IO StepCreationSuccess
-stepsPostH = createStep 
+stepsPostH = createStep
 
--- | Get a step with the given ID.
-stepsGetWithIdH :: T.Text -> AppT IO Step
-stepsGetWithIdH = getStepFromName
+-- | Get all Steps with the given name.
+stepsGetFromNameH :: T.Text -> AppT IO [VersionedStep]
+stepsGetFromNameH = getStepsForName
+
+-- | Get a Step with the given name and version.
+stepsGetFromNameVersionIdH :: T.Text -> Int -> AppT IO Step
+stepsGetFromNameVersionIdH = getStepFromNameAndVersion

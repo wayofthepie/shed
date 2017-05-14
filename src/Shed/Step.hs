@@ -6,7 +6,8 @@ module Shed.Step (
   module Shed.Step.Api
   , Model.migrateAll
   , createStep
-  , getStepFromName
+  , getStepsForName
+  , getStepFromNameAndVersion
   ) where
 
 import Control.Monad.Except
@@ -15,10 +16,10 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.Encoding as TE
 import qualified Data.Text.Lazy as TL
-import Database.Esqueleto hiding ((==.))
+import Database.Esqueleto
 import Database.Esqueleto.Internal.Language (From)
-import Database.Persist
-import Database.Persist.Sql
+import Database.Persist hiding ((==.))
+import qualified Database.Persist.Sql as S
 import Servant
 
 import Shed.Step.Api
@@ -33,26 +34,28 @@ import Debug.Trace
 -- | Persist a Step.
 createStep :: Step -> AppT IO StepCreationSuccess
 createStep step = do
-    exists <- runQuery $ selectFirst [Model.StepName ==. name step] []
-    case exists of
-      Nothing -> runQuery $ do
-        latestVersion <- selectLatestVersion
-        createdStepKey <- insert (stepToModel step (latestVersion + 1))
-        createExecs (executables step) createdStepKey
-        maybeStep <- get createdStepKey
-        case maybeStep of
-          Nothing -> unknownError
-          Just (Model.Step n v) -> pure (StepCreationSuccess n v)
-      Just _ -> alreadyExistsError
+  exists <- runQuery $ selectFirst [Model.StepName S.==. name step] []
+  case exists of
+    Nothing -> runQuery $ do
+      latestVersion <- latestVersionForName (name step)
+      createdStepKey <- insert (stepToModel step (latestVersion + 1))
+      createExecs (executables step) createdStepKey
+      maybeStep <- get createdStepKey
+      case maybeStep of
+        Nothing -> unknownError
+        Just (Model.Step n v) -> pure (StepCreationSuccess n v)
+    Just _ -> alreadyExistsError
   where
     createExecs execs stepKey = do
       let modelExecs = fmap (executableToModel stepKey) execs
       insertMany_ modelExecs
 
-    selectLatestVersion :: SqlPersistT (AppT IO) Int
-    selectLatestVersion = do
+    latestVersionForName :: T.Text -> SqlPersistT (AppT IO) Int
+    latestVersionForName stepName = do
       steps <- select $
-        from $ \step -> pure (max_ (step ^. Model.StepVersion))
+        from $ \step -> do
+          where_ (step ^. Model.StepName ==. val stepName)
+          pure (max_ (step ^. Model.StepVersion))
       pure . head $ fmap (fromMaybe 0 . unValue) steps
 
     alreadyExistsError = customError
@@ -63,17 +66,41 @@ createStep step = do
       err500
       "Something went wrong retrieving the created Step key..."
 
+getStepsForName :: T.Text -> AppT IO [VersionedStep]
+getStepsForName stepName = runQuery getSteps
+  where
+    getSteps :: SqlPersistT (AppT IO) [VersionedStep]
+    getSteps = do
+      steps <- select $ from $ \step -> do
+        where_ (step ^. Model.StepName ==. val stepName)
+        pure step
+      mapM stepEntityToStep steps
+
+    getExecsForStep :: Key Model.Step -> SqlPersistT (AppT IO) [Executable]
+    getExecsForStep stepId = do
+      executables <- select $ from $ \executable -> do
+        where_ (executable ^. Model.ExecutableStep ==. val stepId)
+        pure executable
+      pure (fmap entityToExecutable executables)
+
+    stepEntityToStep :: Entity Model.Step -> SqlPersistT (AppT IO) VersionedStep
+    stepEntityToStep (Entity stepId step) = do
+      executables <- getExecsForStep stepId
+      pure $ VersionedStep
+        (Model.stepVersion step)
+        (modelToStep step executables)
+
 -- | Retrieve the Step corresponding to the given name.
-getStepFromName :: T.Text -> AppT IO Step
-getStepFromName stepName = do
-  maybeStepName <- runQuery $ getBy (Model.UniqueName stepName)
+getStepFromNameAndVersion :: T.Text -> Int -> AppT IO Step
+getStepFromNameAndVersion stepName version = do
+  maybeStepName <- runQuery $ getBy (Model.UniqueNameVersion stepName version)
   case maybeStepName of
     Nothing -> doesNotExistError
     Just entity -> constructStepFromEntity entity
   where
     constructStepFromEntity (Entity stepEntityId stepModel) = do
       execModelEntities <- runQuery $
-        selectList [Model.ExecutableStep ==. stepEntityId] []
+        selectList [Model.ExecutableStep S.==. stepEntityId] []
       let execs = fmap entityToExecutable execModelEntities
       pure (modelToStep stepModel execs)
 

@@ -8,28 +8,20 @@ module Shed
     , app
     ) where
 
-import qualified Control.Category as C
 import Control.Monad.Except
-import Control.Monad.IO.Class
 import Control.Monad.Logger (runStderrLoggingT)
 import Control.Monad.Reader
-import Control.Monad.Trans.Either (EitherT(..), left, right)
-import Data.Aeson
-import Data.Aeson.TH
-import Data.Either (either)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy.Encoding as TE
 import qualified Data.Text.Lazy as TL
-import Database.Persist
+import Database.Persist ()
 import Database.Persist.Sql
 import Database.Persist.Sqlite
-import Database.Persist.TH
+import Database.Persist.TH ()
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Servant
-import qualified Shelly as S
 
-import Debug.Trace
 import Shed.Step
 
 --------------------------------------------------------------------------------
@@ -56,10 +48,10 @@ type Api = StepApi
 --------------------------------------------------------------------------------
 -- | Start our application.
 startApp :: FilePath -> IO ()
-startApp sqliteFile = run 8080 =<< mkApp sqliteFile
+startApp sqliteFile = run 8080 =<< mkApp 
   where
-    mkApp :: FilePath -> IO Application
-    mkApp sqliteFile = do
+    mkApp :: IO Application
+    mkApp = do
       pool <- runStderrLoggingT $ createSqlitePool (T.pack sqliteFile) 5
       runSqlPool (runMigration migrateAll) pool
       pure $ app pool

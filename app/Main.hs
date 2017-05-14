@@ -9,5 +9,5 @@ import Shed
 main :: IO ()
 main = do
   args <- getArgs
-  forkServer "localhost" 7777
+  _ <- forkServer "localhost" 7777
   startApp (args !! 0)

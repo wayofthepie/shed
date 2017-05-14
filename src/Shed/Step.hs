@@ -31,7 +31,7 @@ createStep step = do
     case exists of
       Nothing -> do
         createdStepKey <- runQuery $ insert (stepToModel step)
-        createExecs (executable step) createdStepKey
+        createExecs (executables step) createdStepKey
         maybeStep <- runQuery $ get createdStepKey
         case maybeStep of
           Nothing -> unknownError
@@ -49,7 +49,6 @@ createStep step = do
     unknownError = customError
       err500
       "Something went wrong retrieving the created Step key..."
-
 
 -- | Retrieve the Step corresponding to the given name.
 getStepFromName :: T.Text -> AppT IO Step
@@ -113,5 +112,5 @@ entityToExecutable (Entity _ model) = Executable
 modelToStep :: Model.Step -> [Executable] -> Step
 modelToStep model execs = Step
   { name = Model.stepName model
-  , executable = execs
+  , executables = execs
   }

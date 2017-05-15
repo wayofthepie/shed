@@ -15,23 +15,17 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Shed
-  other-modules:       Shed.Step
+  exposed-modules:     Shed  
                      , Shed.Types
-                     , Shed.Step.Api
-                     , Shed.Step.Model
   build-depends:       base >= 4.7 && < 5
                      , aeson
                      , either >= 2.5.1
                      , esqueleto
+                     , hedis >= 0.9.8
                      , monad-logger
                      , monad-control >= 1.0.0.0
                      , mtl
-                     , persistent
-                     , persistent-sqlite
-                     , persistent-template
                      , servant-server
-                     , shelly
                      , text
                      , transformers-base
                      , wai

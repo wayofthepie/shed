@@ -15,33 +15,33 @@ import Control.Monad.Trans.Control
   )
 import Control.Monad.Except
 import Control.Monad.Reader
-import Database.Persist.Sql
+import Data.Text as T
 import Servant
 
 -- | Our applications monad transformer.
-newtype AppT m a = App
-  { runApp :: ReaderT ConnectionPool (ExceptT ServantErr m) a
+newtype AppT m a = AppT
+  { runApp :: ReaderT T.Text (ExceptT ServantErr m) a
   } deriving
       ( Monad
       , Functor
       , Applicative
-      , MonadReader ConnectionPool
+      , MonadReader T.Text
       , MonadIO
       , MonadError ServantErr
       )
 
 instance MonadTrans AppT where
-  lift = App . lift . lift
+  lift = AppT . lift . lift
 
 instance MonadBase b m => MonadBase b (AppT m) where
   liftBase = liftBaseDefault
 
 instance MonadTransControl AppT where
-  type StT AppT a = StT (ExceptT ServantErr) (StT (ReaderT ConnectionPool) a)
-  liftWith f = App $ liftWith $ \run ->
+  type StT AppT a = StT (ExceptT ServantErr) (StT (ReaderT T.Text) a)
+  liftWith f = AppT $ liftWith $ \run ->
     liftWith $ \run' ->
       f (run' . run . runApp)
-  restoreT = App . restoreT . restoreT
+  restoreT = AppT . restoreT . restoreT
 
 instance MonadBaseControl b m => MonadBaseControl b (AppT m) where
   type StM (AppT m) a = ComposeSt AppT m a

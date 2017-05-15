@@ -7,7 +7,4 @@ import System.Remote.Monitoring
 import Shed
 
 main :: IO ()
-main = do
-  args <- getArgs
-  _ <- forkServer "localhost" 7777
-  startApp (args !! 0)
+main = forkServer "localhost" 7777 >> startApp 

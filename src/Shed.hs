@@ -7,40 +7,45 @@ module Shed
     , app
     ) where
 
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Logger (runStderrLoggingT)
 import Control.Monad.Reader
 import qualified Data.Text as T
+import Database.Redis
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Servant
 
+import qualified Shed.Repository as Repo
 import Shed.Types (AppT(..))
 
 --------------------------------------------------------------------------------
 -- Api.
 --------------------------------------------------------------------------------
-type Api = "test" :> Get '[JSON] T.Text
+type Api = "test" :> Get '[JSON] (Either T.Text T.Text)
 
 --------------------------------------------------------------------------------
 -- Server setup.
 --------------------------------------------------------------------------------
 -- | Start our application.
-startApp :: FilePath -> IO ()
-startApp sqliteFile = run 8080 =<< mkApp
+startApp :: IO ()
+startApp = run 8080 =<< mkApp
   where
     mkApp :: IO Application
-    mkApp = pure $ app (T.pack "test")
+    mkApp = do
+      conn <- connect defaultConnectInfo
+      pure (app conn)
 
-runAppT :: T.Text -> AppT IO :~> Handler
+runAppT :: Connection -> AppT IO :~> Handler
 runAppT pool = Nat (flip runReaderT pool . runApp)
 
-app :: T.Text -> Application
+app :: Connection -> Application
 app pool = serve api (readerServer pool)
   where
     api :: Proxy Api
     api = Proxy
 
-readerServer :: T.Text -> Server Api
+readerServer :: Connection -> Server Api
 readerServer pool = enter (runAppT pool) readerServerT
 
 -- | Combine our handlers.
@@ -51,5 +56,7 @@ readerServerT = testH
 -- Handlers
 --------------------------------------------------------------------------------
 -- | Create a Step.
-testH :: AppT IO T.Text
-testH = pure (T.pack "Fuck ya")
+testH :: AppT IO (Either T.Text T.Text)
+testH = do
+  pool <- ask
+  liftIO $ runRedis pool (Repo.storeTextAt (T.pack "test") (T.pack "test"))

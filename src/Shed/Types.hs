@@ -15,17 +15,18 @@ import Control.Monad.Trans.Control
   )
 import Control.Monad.Except
 import Control.Monad.Reader
+import Database.Redis (Connection(..))
 import Data.Text as T
 import Servant
 
 -- | Our applications monad transformer.
 newtype AppT m a = AppT
-  { runApp :: ReaderT T.Text (ExceptT ServantErr m) a
+  { runApp :: ReaderT Connection (ExceptT ServantErr m) a
   } deriving
       ( Monad
       , Functor
       , Applicative
-      , MonadReader T.Text
+      , MonadReader Connection
       , MonadIO
       , MonadError ServantErr
       )
@@ -37,7 +38,7 @@ instance MonadBase b m => MonadBase b (AppT m) where
   liftBase = liftBaseDefault
 
 instance MonadTransControl AppT where
-  type StT AppT a = StT (ExceptT ServantErr) (StT (ReaderT T.Text) a)
+  type StT AppT a = StT (ExceptT ServantErr) (StT (ReaderT Connection) a)
   liftWith f = AppT $ liftWith $ \run ->
     liftWith $ \run' ->
       f (run' . run . runApp)

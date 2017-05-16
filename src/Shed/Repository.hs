@@ -8,13 +8,14 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Database.Redis
 
+
 storeTextAt :: T.Text -> T.Text -> Redis (Either T.Text T.Text)
 storeTextAt k t = do
   set (T.encodeUtf8 k) (T.encodeUtf8 t)
   eitherVal <- get (T.encodeUtf8 k)
   pure $ either
     isError
-    (maybe (Left "No key found for....") (\b -> Right $ T.decodeUtf8 b))
+    (maybe (Left "No key found for....") (Right . T.decodeUtf8))
     eitherVal
 
 isError :: Reply -> Either T.Text T.Text

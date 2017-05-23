@@ -52,7 +52,7 @@ decodeTxResult TxAborted = Left (TransactionAborted "Transaction was aborted!")
 decodeTxResult (TxError err) = Left (JsonError (T.pack err))
 
 
--- | Decode a redis 'Reply'.
+-- | Decode a redis 'Reply'. This assumes a 'Reply' is always an error of some kind.
 decodeReply :: Reply -> RedisError
 decodeReply (Error bs) = JsonError (T.decodeUtf8 bs)
 decodeReply (Bulk maybeBs) = maybe

@@ -20,14 +20,17 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Servant
 
-import qualified Shed.Model as Model
-import qualified Shed.Repository as Repo
+import Shed.Redis (RetrievalError(..), StoreError(..), Key(..))
+import Shed.Step.Api
+import qualified Shed.Step.Handler as Step
+import qualified Shed.Step.Model as Model
+import qualified Shed.Step.Repository as Repo
 import Shed.Types (AppT(..))
 
 --------------------------------------------------------------------------------
 -- Api.
 --------------------------------------------------------------------------------
-type Api = "test" :> Get '[JSON] Model.Test
+type Api = StepModuleApi
 
 --------------------------------------------------------------------------------
 -- Server setup.
@@ -55,24 +58,4 @@ readerServer pool = enter (runAppT pool) readerServerT
 
 -- | Combine our handlers.
 readerServerT :: ServerT Api (AppT IO)
-readerServerT = testH
-
---------------------------------------------------------------------------------
--- Handlers
---------------------------------------------------------------------------------
--- | Create a Step.
-testH :: AppT IO Model.Test
-testH = do
-  pool <- ask
-  e <- liftIO $ runRedis pool (Repo.getJson (Repo.Key "t"))
-  either decodeError pure e
-  where
-    decodeError (Repo.JsonRetrievalError e) = customError err500 (T.unpack e)
-    decodeError (Repo.JsonDecodeError e) = customError err404 (T.unpack e)
-
-
--- | Throw a custom ServantErr.
-customError :: MonadError ServantErr m => ServantErr -> String -> m a
-customError errF msg = throwError (errF
-    { errBody = TL.encodeUtf8 . TL.fromStrict . T.pack $ msg
-    })
+readerServerT = Step.getStepH :<|> Step.postStepH

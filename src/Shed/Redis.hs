@@ -1,11 +1,15 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Shed.Redis where
 
+import Control.Monad
+import Control.Monad.Operational
 import Data.Aeson (FromJSON, ToJSON, decode, encode, toJSON)
-import Data.ByteString
+import Data.ByteString hiding (singleton)
 import Data.ByteString.Lazy as BL (fromStrict, toStrict)
 import Data.Either (either)
 import Data.Maybe (maybe)

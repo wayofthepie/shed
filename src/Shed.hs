@@ -20,11 +20,11 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Servant
 
-import Shed.Redis (RetrievalError(..), StoreError(..), Key(..))
+import Shed.Redis
 import Shed.Step.Api
 import qualified Shed.Step.Handler as Step
-import qualified Shed.Step.Model as Model
-import qualified Shed.Step.Repository as Repo
+import qualified Shed.Step.Persist.Model as Model
+import qualified Shed.Step.Persist.Repository as Repo
 import Shed.Types (AppT(..))
 
 --------------------------------------------------------------------------------
@@ -58,4 +58,4 @@ readerServer pool = enter (runAppT pool) readerServerT
 
 -- | Combine our handlers.
 readerServerT :: ServerT Api (AppT IO)
-readerServerT = Step.getStepH :<|> Step.postStepH
+readerServerT = Step.postModuleVersionH :<|> Step.getModuleVersionH 

@@ -9,18 +9,15 @@ module Shed.Step.Api where
 import qualified Data.Text as T
 import Servant
 
-import Shed.Step.Model
-
-data StepsModuleVersion = StepsModuleVersion
-  { version :: T.Text
-  , steps :: [Step]
-  }
+import Shed.Redis (Key)
+import Shed.Step.Persist.Model
 
 type StepModuleApi =
-  -- /module/
-  "module" :> Get '[JSON] StepsModule
   -- /module/{moduleName}
+  "module"
+    :> Capture "moduleName" T.Text
+    :> ReqBody '[JSON] ModuleVersion
+    :> PostNoContent '[JSON] ()
   :<|> "module"
     :> Capture "moduleName" T.Text
-    :> ReqBody '[JSON] StepsModuleVersion
-    :> Post '[JSON] ()
+    :> Get '[JSON] ModuleVersion

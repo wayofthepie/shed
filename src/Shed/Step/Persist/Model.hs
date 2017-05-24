@@ -10,6 +10,7 @@ import GHC.Generics
 
 newtype ModuleNs = ModuleNs T.Text deriving (Eq, FromJSON, Generic, ToJSON, Show)
 
+
 data ModuleVersion = ModuleVersion
   { name :: T.Text
   , steps :: [Step]
@@ -18,8 +19,13 @@ data ModuleVersion = ModuleVersion
 
 data Step = Step
   { name :: T.Text
-  , environment :: [T.Text]
+  , params :: [StepParam]
   , executables :: [Executable]
+  } deriving (Eq, FromJSON, Generic, ToJSON, Show)
+
+data StepParam = StepParam
+  { key :: T.Text
+  , value :: T.Text
   } deriving (Eq, FromJSON, Generic, ToJSON, Show)
 
 data Executable = Executable
